@@ -8,15 +8,23 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const app = express();
-const PORT = 3000;
-const dbHost = process.env.DB_HOST;
-const dbUser = process.env.DB_USER;
-const dbPass = process.env.DB_PASS;
-const jwtSecret = process.env.JWT_SECRET;
-console.log("DB_HOST:", dbHost);
-console.log("DB_USER:", dbUser);
-console.log("DB_PASS:", dbPass);
-console.log("JWT_SECRET:", jwtSecret);
+
+const pool = mysql.createPool({
+    host: process.env.DB_HOST, 
+    user: process.env.DB_USERNAME, 
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DBNAME,
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0
+});
+
+pool.getConnection((err, conn) => {
+    if(err) console.log(err)
+    console.log("Connected successfully")
+})
+
+module.exports = pool.promise()
 
 const SECRET_KEY = "YOUR_VERY_SECURE_SECRET_KEY_REPLACE_IN_PRODUCTION";
 
@@ -80,7 +88,7 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// Registration Route
+
 const generateUniqueCookpadId = async () => {
   let uniqueId = '';
   
@@ -579,12 +587,25 @@ app.get('/user/check-fav-recipe/:id', (req, res) => {
 
 
 
-app.put("/editRecipe/:id", verifyToken, (req, res) => {
-  const { title, servings, cookTime, ingredients, steps } = req.body;
+app.put("/editRecipe/:id", verifyToken, upload.single('image'), (req, res) => {
+  const { title, servings, cookTime, ingredients, steps, existingImagePath } = req.body;
   const recipeId = req.params.id;
 
+  // Debug logging
+  console.log('Existing Image Path:', existingImagePath);
+  console.log('New Uploaded File:', req.file);
+
+  // Tentukan path image
+  let newImagePath = existingImagePath; // Default ke path existing
+
+  // Jika ada file baru diupload, gunakan filename baru
+  if (req.file) {
+    newImagePath = req.file.filename;
+  }
+
+  // Validasi input
   if (!title || !ingredients || !steps) {
-    return res.status(400).json({ message: "Required fields are missing." });
+    return res.status(400).json({ message: "Required fields are missing" });
   }
 
   const query = `
@@ -599,29 +620,40 @@ app.put("/editRecipe/:id", verifyToken, (req, res) => {
     WHERE id = ? AND user_id = ?
   `;
 
+  // Tambahkan prefix 'uploads/' jika path tidak kosong
+  const fullImagePath = newImagePath ? `uploads/${newImagePath}` : null;
+
   db.query(
     query,
     [
       title,
       servings || null,
       cookTime || null,
-      JSON.stringify(ingredients),
-      JSON.stringify(steps),
-      req.body.imagePath || null,
+      JSON.stringify(JSON.parse(ingredients)),
+      JSON.stringify(JSON.parse(steps)),
+      fullImagePath, // Gunakan path lengkap atau null
       recipeId,
-      req.userId,  // Ensure that the recipe belongs to the logged-in user
+      req.userId,
     ],
     (err, result) => {
       if (err) {
-        return res.status(500).json({ message: "Failed to update recipe." });
+        console.error('Update Recipe Error:', err);
+        return res.status(500).json({ message: "Failed to update recipe", error: err });
       }
+      
       if (result.affectedRows === 0) {
-        return res.status(404).json({ message: "Recipe not found or you're not authorized." });
+        return res.status(404).json({ message: "Recipe not found or you're not authorized" });
       }
-      res.status(200).json({ message: "Recipe updated successfully." });
+      
+      res.status(200).json({ 
+        message: "Recipe updated successfully",
+        imagePath: newImagePath 
+      });
     }
   );
 });
+
+
 
 
 
