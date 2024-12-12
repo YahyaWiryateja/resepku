@@ -8,31 +8,16 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const app = express();
+const PORT = 3000;
 
-const pool = mysql.createPool({
-    host: process.env.DB_HOST, 
-    user: process.env.DB_USERNAME, 
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_DBNAME,
-    waitForConnections: true,
-    connectionLimit: 10,
-    queueLimit: 0
-});
-
-pool.getConnection((err, conn) => {
-    if(err) console.log(err)
-    console.log("Connected successfully")
-})
-
-module.exports = pool.promise()
 
 const SECRET_KEY = "YOUR_VERY_SECURE_SECRET_KEY_REPLACE_IN_PRODUCTION";
 
 const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root', 
-  password: '', 
-  database: 'resepku'
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
 });
 
 db.connect((err) => {
@@ -336,6 +321,23 @@ app.get('/user/own-recipes', verifyToken, async (req, res) => {
   }
 });
 
+
+app.get("/favresep", (req, res) => {
+  const query = 'SELECT id, user_id, title, servings, cook_time, ingredients, steps, created_at, image_path FROM favresep';
+
+  db.query(query, (err, results) => {
+    if (err) {
+      return res.status(500).json({ message: "Error fetching favorite recipes" });
+    }
+
+    // Check if there are no records
+    if (results.length === 0) {
+      return res.status(404).json({ message: "No favorite recipes found" });
+    }
+
+    res.status(200).json(results);
+  });
+});
 
 app.get('/user/favorite-recipes', verifyToken, async (req, res) => {
   const userId = req.userId;
@@ -654,15 +656,12 @@ app.put("/editRecipe/:id", verifyToken, upload.single('image'), (req, res) => {
 });
 
 
-
-
-
 module.exports = app;
 
 // Serve static files (uploads directory)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
 
