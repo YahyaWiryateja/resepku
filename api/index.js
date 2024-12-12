@@ -8,7 +8,7 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const app = express();
-const PORT = 3000;
+
 
 
 const SECRET_KEY = "YOUR_VERY_SECURE_SECRET_KEY_REPLACE_IN_PRODUCTION";
@@ -661,9 +661,6 @@ module.exports = app;
 // Serve static files (uploads directory)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
 
 // Global error handler
 app.use((err, req, res, next) => {
