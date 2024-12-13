@@ -8,17 +8,16 @@ const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
 const app = express();
-
+const PORT = 3000;
 
 
 const SECRET_KEY = "YOUR_VERY_SECURE_SECRET_KEY_REPLACE_IN_PRODUCTION";
 
 const db = mysql.createConnection({
-  host: process.env.DB_HOST,
-  port: process.env.DB_PORT || 3306,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
+  host: 'localhost',
+  user: 'root', 
+  password: '', 
+  database: 'resepku'
 });
 
 db.connect((err) => {
@@ -662,6 +661,9 @@ module.exports = app;
 // Serve static files (uploads directory)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
+});
 
 // Global error handler
 app.use((err, req, res, next) => {
