@@ -14,23 +14,26 @@ const PORT = process.env.PORT || 3000;
 
 const SECRET_KEY = "YOUR_VERY_SECURE_SECRET_KEY_REPLACE_IN_PRODUCTION";
 
-const db = mysql.createConnection({
+const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
-  ssl: { rejectUnauthorized: false }
+  waitForConnections: true,
+  connectionLimit: 10, // Maksimal 10 koneksi
+  queueLimit: 0,
+  ssl: { rejectUnauthorized: false },
 });
 
 
 
-db.connect((err) => {
+db.query('SELECT 1', (err, results) => {
   if (err) {
-    console.error('Error connecting to the database:', err);
-    throw err;
+    console.error('Database error:', err);
+  } else {
+    console.log('Database connected successfully:', results);
   }
-  console.log('Connected to MySQL database');
 });
 
 // Middleware
