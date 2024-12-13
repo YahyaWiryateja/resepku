@@ -20,7 +20,10 @@ const db = mysql.createConnection({
   password: process.env.DB_PASSWORD,
   database: process.env.DB_NAME,
   port: process.env.DB_PORT,
-  ssl: { rejectUnauthorized: false }
+  ssl: {
+    rejectUnauthorized: true,
+    ca: fs.readFileSync(path.join(__dirname, 'clever-cloud-ca.pem')), // Tambahkan sertifikat CA jika dibutuhkan
+  },
 });
 
 db.connect((err) => {
@@ -310,19 +313,7 @@ app.post("/upload-recipe-image", verifyToken, uploadRecipeImage.single("recipeIm
 });
 
 
-app.get('/user/own-recipes', verifyToken, async (req, res) => {
-  const userId = req.userId;
 
-  try {
-    const [rows] = await db.promise().query(
-      'SELECT id, title, servings, cook_time, REPLACE(image_path, "uploads/", "") AS image_path FROM ownresep WHERE user_id = ?',
-      [userId]
-    );
-    res.json(rows);
-  } catch (error) {
-    res.status(500).json({ message: 'Error fetching own recipes', error });
-  }
-});
 
 
 app.get("/favresep", (req, res) => {
@@ -342,15 +333,84 @@ app.get("/favresep", (req, res) => {
   });
 });
 
+// app.get('/user/own-recipes', verifyToken, async (req, res) => {
+//   const userId = req.userId;
+
+//   try {
+//     const [rows] = await db.promise().query(
+//       'SELECT id, title, servings, cook_time, REPLACE(image_path, "uploads/", "") AS image_path FROM ownresep WHERE user_id = ?',
+//       [userId]
+//     );
+//     res.json(rows);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error fetching own recipes', error });
+//   }
+// });
+
+// app.get('/user/favorite-recipes', verifyToken, async (req, res) => {
+//   const userId = req.userId;
+
+//   try {
+//     const [rows] = await db.promise().query(
+//       `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path 
+//        FROM favresep f
+//        JOIN resep r ON f.resep_id = r.id
+//        JOIN ownresep o ON r.ownresep_id = o.id
+//        WHERE f.user_id = ?`,
+//       [userId]
+//     );
+//     res.json(rows);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error fetching favorite recipes', error });
+//   }
+// });
+
+// app.get('/user/published-recipes', verifyToken, async (req, res) => {
+//   const userId = req.userId;
+
+//   try {
+//     const [rows] = await db.promise().query(
+//       `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path 
+//        FROM resep r
+//        JOIN ownresep o ON r.ownresep_id = o.id
+//        WHERE o.user_id = ?`,
+//       [userId]
+//     );
+//     res.json(rows);
+//   } catch (error) {
+//     res.status(500).json({ message: 'Error fetching published recipes', error });
+//   }
+// });
+
+app.get('/user/own-recipes', verifyToken, async (req, res) => {
+  const userId = req.userId;
+
+  try {
+    const [rows] = await db.promise().query(
+      `SELECT o.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path, 
+              o.cook_time, u.username AS author
+       FROM ownresep o
+       JOIN users u ON o.user_id = u.id
+       WHERE o.user_id = ?`,
+      [userId]
+    );
+    res.json(rows);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching own recipes', error });
+  }
+});
+
 app.get('/user/favorite-recipes', verifyToken, async (req, res) => {
   const userId = req.userId;
 
   try {
     const [rows] = await db.promise().query(
-      `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path 
+      `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path, 
+              o.cook_time, u.username AS author
        FROM favresep f
        JOIN resep r ON f.resep_id = r.id
        JOIN ownresep o ON r.ownresep_id = o.id
+       JOIN users u ON o.user_id = u.id
        WHERE f.user_id = ?`,
       [userId]
     );
@@ -360,14 +420,17 @@ app.get('/user/favorite-recipes', verifyToken, async (req, res) => {
   }
 });
 
+
 app.get('/user/published-recipes', verifyToken, async (req, res) => {
   const userId = req.userId;
 
   try {
     const [rows] = await db.promise().query(
-      `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path 
+      `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path, 
+              o.cook_time, u.username AS author
        FROM resep r
        JOIN ownresep o ON r.ownresep_id = o.id
+       JOIN users u ON o.user_id = u.id
        WHERE o.user_id = ?`,
       [userId]
     );
@@ -377,34 +440,37 @@ app.get('/user/published-recipes', verifyToken, async (req, res) => {
   }
 });
 
+
 app.get('/user/recipe-detail/:source/:id', verifyToken, async (req, res) => {
   const { source, id } = req.params;
   const userId = req.userId;
 
-  console.log('User ID:', userId);
-  console.log('Source:', source);
-  console.log('Recipe ID:', id);
-
   let query = '';
   let params = [userId, id];
 
-  // Tentukan query berdasarkan source
   if (source === 'own') {
-    query = `SELECT id, title, servings, cook_time, ingredients, steps, 
-             REPLACE(image_path, 'uploads/', '') AS image_path 
-             FROM ownresep WHERE user_id = ? AND id = ?`;
+    query = `SELECT o.id, o.title, o.servings, o.cook_time, o.ingredients, o.steps, 
+                    REPLACE(o.image_path, 'uploads/', '') AS image_path, 
+                    u.username AS author
+             FROM ownresep o
+             JOIN users u ON o.user_id = u.id
+             WHERE o.user_id = ? AND o.id = ?`;
   } else if (source === 'favorite') {
     query = `SELECT r.id, o.title, o.servings, o.cook_time, o.ingredients, o.steps, 
-             REPLACE(o.image_path, 'uploads/', '') AS image_path 
+                    REPLACE(o.image_path, 'uploads/', '') AS image_path, 
+                    u.username AS author
              FROM favresep f
              JOIN resep r ON f.resep_id = r.id
              JOIN ownresep o ON r.ownresep_id = o.id
+             JOIN users u ON o.user_id = u.id
              WHERE f.user_id = ? AND r.id = ?`;
   } else if (source === 'published') {
     query = `SELECT r.id, o.title, o.servings, o.cook_time, o.ingredients, o.steps, 
-             REPLACE(o.image_path, 'uploads/', '') AS image_path 
+                    REPLACE(o.image_path, 'uploads/', '') AS image_path, 
+                    u.username AS author
              FROM resep r
              JOIN ownresep o ON r.ownresep_id = o.id
+             JOIN users u ON o.user_id = u.id
              WHERE o.user_id = ? AND r.id = ?`;
   } else {
     return res.status(400).json({ message: 'Invalid source' });
@@ -420,6 +486,7 @@ app.get('/user/recipe-detail/:source/:id', verifyToken, async (req, res) => {
     res.status(500).json({ message: 'Error fetching recipe details', error });
   }
 });
+
 
 app.get('/recipes', async (req, res) => {
   const searchKeyword = req.query.search || '';  // Ambil keyword pencarian
