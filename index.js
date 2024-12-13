@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 3000;
 
 const SECRET_KEY = "YOUR_VERY_SECURE_SECRET_KEY_REPLACE_IN_PRODUCTION";
 
+// hosting
 const db = mysql.createPool({
   host: process.env.DB_HOST,
   user: process.env.DB_USER,
@@ -35,6 +36,24 @@ db.query('SELECT 1', (err, results) => {
     console.log('Database connected successfully:', results);
   }
 });
+
+// //local
+// const db = mysql.createConnection({
+//   host: process.env.DB_HOST,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASSWORD,
+//   database: process.env.DB_NAME,
+//   port: process.env.DB_PORT,
+// });
+
+// db.connect((err) => {
+//   if (err) {
+//     console.error('Error connecting to the database:', err);
+//     throw err;
+//   }
+//   console.log('Connected to MySQL database on localhost');
+// });
+
 
 // Middleware
 app.use(bodyParser.json());
@@ -335,55 +354,6 @@ app.get("/favresep", (req, res) => {
   });
 });
 
-// app.get('/user/own-recipes', verifyToken, async (req, res) => {
-//   const userId = req.userId;
-
-//   try {
-//     const [rows] = await db.promise().query(
-//       'SELECT id, title, servings, cook_time, REPLACE(image_path, "uploads/", "") AS image_path FROM ownresep WHERE user_id = ?',
-//       [userId]
-//     );
-//     res.json(rows);
-//   } catch (error) {
-//     res.status(500).json({ message: 'Error fetching own recipes', error });
-//   }
-// });
-
-// app.get('/user/favorite-recipes', verifyToken, async (req, res) => {
-//   const userId = req.userId;
-
-//   try {
-//     const [rows] = await db.promise().query(
-//       `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path 
-//        FROM favresep f
-//        JOIN resep r ON f.resep_id = r.id
-//        JOIN ownresep o ON r.ownresep_id = o.id
-//        WHERE f.user_id = ?`,
-//       [userId]
-//     );
-//     res.json(rows);
-//   } catch (error) {
-//     res.status(500).json({ message: 'Error fetching favorite recipes', error });
-//   }
-// });
-
-// app.get('/user/published-recipes', verifyToken, async (req, res) => {
-//   const userId = req.userId;
-
-//   try {
-//     const [rows] = await db.promise().query(
-//       `SELECT r.id, o.title, REPLACE(o.image_path, 'uploads/', '') AS image_path 
-//        FROM resep r
-//        JOIN ownresep o ON r.ownresep_id = o.id
-//        WHERE o.user_id = ?`,
-//       [userId]
-//     );
-//     res.json(rows);
-//   } catch (error) {
-//     res.status(500).json({ message: 'Error fetching published recipes', error });
-//   }
-// });
-
 app.get('/user/own-recipes', verifyToken, async (req, res) => {
   const userId = req.userId;
 
@@ -489,24 +459,27 @@ app.get('/user/recipe-detail/:source/:id', verifyToken, async (req, res) => {
   }
 });
 
-
 app.get('/recipes', async (req, res) => {
-  const searchKeyword = req.query.search || '';  // Ambil keyword pencarian
+  const searchKeyword = req.query.search || '';
+  const sortOrder = req.query.sort || 'newest'; // Default to newest
+
   try {
     const [rows] = await db.promise().query(
       `SELECT r.id, o.title, o.servings, o.cook_time, 
               REPLACE(o.image_path, 'uploads/', '') AS image_path, 
               o.user_id, o.ingredients, o.steps, 
-              u.username
+              u.username,
+              o.created_at
        FROM resep r
        JOIN ownresep o ON r.ownresep_id = o.id
        JOIN users u ON o.user_id = u.id
-       WHERE o.title LIKE ? 
-       OR JSON_CONTAINS(o.ingredients, JSON_QUOTE(?))`,
-      [`%${searchKeyword}%`, searchKeyword]
+       WHERE LOWER(o.title) LIKE LOWER(?) 
+       OR LOWER(o.ingredients) LIKE LOWER(?)
+       ORDER BY o.created_at ${sortOrder === 'oldest' ? 'ASC' : 'DESC'}`,
+      [`%${searchKeyword}%`, `%${searchKeyword}%`]
     );
 
-    res.json(rows);  // Kembalikan hasil pencarian
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: 'Error fetching recipes', error });
   }
